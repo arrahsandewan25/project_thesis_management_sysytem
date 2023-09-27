@@ -1,161 +1,317 @@
-## Any Promise
+# Arg
 
-[![Build Status](https://secure.travis-ci.org/kevinbeaty/any-promise.svg)](http://travis-ci.org/kevinbeaty/any-promise)
+`arg` is an unopinionated, no-frills CLI argument parser.
 
-Let your library support any ES 2015 (ES6) compatible `Promise` and leave the choice to application authors. The application can *optionally* register its preferred `Promise` implementation and it will be exported when requiring `any-promise` from library code.
-
-If no preference is registered, defaults to the global `Promise` for newer Node.js versions. The browser version defaults to the window `Promise`, so polyfill or register as necessary.
-
-### Usage with global Promise:
-
-Assuming the global `Promise` is the desired implementation:
+## Installation
 
 ```bash
-# Install any libraries depending on any-promise
-$ npm install mz
+npm install arg
 ```
 
-The installed libraries will use global Promise by default.
+## Usage
+
+`arg()` takes either 1 or 2 arguments:
+
+1. Command line specification object (see below)
+2. Parse options (_Optional_, defaults to `{permissive: false, argv: process.argv.slice(2), stopAtPositional: false}`)
+
+It returns an object with any values present on the command-line (missing options are thus
+missing from the resulting object). Arg performs no validation/requirement checking - we
+leave that up to the application.
+
+All parameters that aren't consumed by options (commonly referred to as "extra" parameters)
+are added to `result._`, which is _always_ an array (even if no extra parameters are passed,
+in which case an empty array is returned).
+
+```javascript
+const arg = require('arg');
+
+// `options` is an optional parameter
+const args = arg(
+	spec,
+	(options = { permissive: false, argv: process.argv.slice(2) })
+);
+```
+
+For example:
+
+```console
+$ node ./hello.js --verbose -vvv --port=1234 -n 'My name' foo bar --tag qux --tag=qix -- --foobar
+```
+
+```javascript
+// hello.js
+const arg = require('arg');
+
+const args = arg({
+	// Types
+	'--help': Boolean,
+	'--version': Boolean,
+	'--verbose': arg.COUNT, // Counts the number of times --verbose is passed
+	'--port': Number, // --port <number> or --port=<number>
+	'--name': String, // --name <string> or --name=<string>
+	'--tag': [String], // --tag <string> or --tag=<string>
+
+	// Aliases
+	'-v': '--verbose',
+	'-n': '--name', // -n <string>; result is stored in --name
+	'--label': '--name' // --label <string> or --label=<string>;
+	//     result is stored in --name
+});
+
+console.log(args);
+/*
+{
+	_: ["foo", "bar", "--foobar"],
+	'--port': 1234,
+	'--verbose': 4,
+	'--name': "My name",
+	'--tag': ["qux", "qix"]
+}
+*/
+```
+
+The values for each key=&gt;value pair is either a type (function or [function]) or a string (indicating an alias).
+
+- In the case of a function, the string value of the argument's value is passed to it,
+  and the return value is used as the ultimate value.
+
+- In the case of an array, the only element _must_ be a type function. Array types indicate
+  that the argument may be passed multiple times, and as such the resulting value in the returned
+  object is an array with all of the values that were passed using the specified flag.
+
+- In the case of a string, an alias is established. If a flag is passed that matches the _key_,
+  then the _value_ is substituted in its place.
+
+Type functions are passed three arguments:
+
+1. The parameter value (always a string)
+2. The parameter name (e.g. `--label`)
+3. The previous value for the destination (useful for reduce-like operations or for supporting `-v` multiple times, etc.)
+
+This means the built-in `String`, `Number`, and `Boolean` type constructors "just work" as type functions.
+
+Note that `Boolean` and `[Boolean]` have special treatment - an option argument is _not_ consumed or passed, but instead `true` is
+returned. These options are called "flags".
+
+For custom handlers that wish to behave as flags, you may pass the function through `arg.flag()`:
+
+```javascript
+const arg = require('arg');
+
+const argv = [
+	'--foo',
+	'bar',
+	'-ff',
+	'baz',
+	'--foo',
+	'--foo',
+	'qux',
+	'-fff',
+	'qix'
+];
+
+function myHandler(value, argName, previousValue) {
+	/* `value` is always `true` */
+	return 'na ' + (previousValue || 'batman!');
+}
+
+const args = arg(
+	{
+		'--foo': arg.flag(myHandler),
+		'-f': '--foo'
+	},
+	{
+		argv
+	}
+);
+
+console.log(args);
+/*
+{
+	_: ['bar', 'baz', 'qux', 'qix'],
+	'--foo': 'na na na na na na na na batman!'
+}
+*/
+```
+
+As well, `arg` supplies a helper argument handler called `arg.COUNT`, which equivalent to a `[Boolean]` argument's `.length`
+property - effectively counting the number of times the boolean flag, denoted by the key, is passed on the command line..
+For example, this is how you could implement `ssh`'s multiple levels of verbosity (`-vvvv` being the most verbose).
+
+```javascript
+const arg = require('arg');
+
+const argv = ['-AAAA', '-BBBB'];
+
+const args = arg(
+	{
+		'-A': arg.COUNT,
+		'-B': [Boolean]
+	},
+	{
+		argv
+	}
+);
+
+console.log(args);
+/*
+{
+	_: [],
+	'-A': 4,
+	'-B': [true, true, true, true]
+}
+*/
+```
+
+### Options
+
+If a second parameter is specified and is an object, it specifies parsing options to modify the behavior of `arg()`.
+
+#### `argv`
+
+If you have already sliced or generated a number of raw arguments to be parsed (as opposed to letting `arg`
+slice them from `process.argv`) you may specify them in the `argv` option.
+
+For example:
+
+```javascript
+const args = arg(
+	{
+		'--foo': String
+	},
+	{
+		argv: ['hello', '--foo', 'world']
+	}
+);
+```
+
+results in:
+
+```javascript
+const args = {
+	_: ['hello'],
+	'--foo': 'world'
+};
+```
+
+#### `permissive`
+
+When `permissive` set to `true`, `arg` will push any unknown arguments
+onto the "extra" argument array (`result._`) instead of throwing an error about
+an unknown flag.
+
+For example:
+
+```javascript
+const arg = require('arg');
+
+const argv = [
+	'--foo',
+	'hello',
+	'--qux',
+	'qix',
+	'--bar',
+	'12345',
+	'hello again'
+];
+
+const args = arg(
+	{
+		'--foo': String,
+		'--bar': Number
+	},
+	{
+		argv,
+		permissive: true
+	}
+);
+```
+
+results in:
+
+```javascript
+const args = {
+	_: ['--qux', 'qix', 'hello again'],
+	'--foo': 'hello',
+	'--bar': 12345
+};
+```
+
+#### `stopAtPositional`
+
+When `stopAtPositional` is set to `true`, `arg` will halt parsing at the first
+positional argument.
+
+For example:
+
+```javascript
+const arg = require('arg');
+
+const argv = ['--foo', 'hello', '--bar'];
+
+const args = arg(
+	{
+		'--foo': Boolean,
+		'--bar': Boolean
+	},
+	{
+		argv,
+		stopAtPositional: true
+	}
+);
+```
+
+results in:
+
+```javascript
+const args = {
+	_: ['hello', '--bar'],
+	'--foo': true
+};
+```
+
+### Errors
+
+Some errors that `arg` throws provide a `.code` property in order to aid in recovering from user error, or to
+differentiate between user error and developer error (bug).
+
+##### ARG_UNKNOWN_OPTION
+
+If an unknown option (not defined in the spec object) is passed, an error with code `ARG_UNKNOWN_OPTION` will be thrown:
 
 ```js
-// in library
-var Promise = require('any-promise')  // the global Promise
-
-function promiseReturningFunction(){
-    return new Promise(function(resolve, reject){...})
+// cli.js
+try {
+	require('arg')({ '--hi': String });
+} catch (err) {
+	if (err.code === 'ARG_UNKNOWN_OPTION') {
+		console.log(err.message);
+	} else {
+		throw err;
+	}
 }
 ```
 
-### Usage with registration:
-
-Assuming `bluebird` is the desired Promise implementation:
-
-```bash
-# Install preferred promise library
-$ npm install bluebird
-# Install any-promise to allow registration
-$ npm install any-promise
-# Install any libraries you would like to use depending on any-promise
-$ npm install mz
+```shell
+node cli.js --extraneous true
+Unknown or unexpected option: --extraneous
 ```
 
-Register your preference in the application entry point before any other `require` of packages that load `any-promise`:
+# FAQ
+
+A few questions and answers that have been asked before:
+
+### How do I require an argument with `arg`?
+
+Do the assertion yourself, such as:
 
 ```javascript
-// top of application index.js or other entry point
-require('any-promise/register/bluebird')
+const args = arg({ '--name': String });
 
-// -or- Equivalent to above, but allows customization of Promise library
-require('any-promise/register')('bluebird', {Promise: require('bluebird')})
+if (!args['--name']) throw new Error('missing required argument: --name');
 ```
 
-Now that the implementation is registered, you can use any package depending on `any-promise`:
+# License
 
-
-```javascript
-var fsp = require('mz/fs') // mz/fs will use registered bluebird promises
-var Promise = require('any-promise')  // the registered bluebird promise 
-```
-
-It is safe to call `register` multiple times, but it must always be with the same implementation.
-
-Again, registration is *optional*. It should only be called by the application user if overriding the global `Promise` implementation is desired.
-
-### Optional Application Registration
-
-As an application author, you can *optionally* register a preferred `Promise` implementation on application startup (before any call to `require('any-promise')`:
-
-You must register your preference before any call to `require('any-promise')` (by you or required packages), and only one implementation can be registered. Typically, this registration would occur at the top of the application entry point.
-
-
-#### Registration shortcuts
-
-If you are using a known `Promise` implementation, you can register your preference with a shortcut:
-
-
-```js
-require('any-promise/register/bluebird')
-// -or-
-import 'any-promise/register/q';
-```
-
-Shortcut registration is the preferred registration method as it works in the browser and Node.js. It is also convenient for using with `import` and many test runners, that offer a `--require` flag:
-
-```
-$ ava --require=any-promise/register/bluebird test.js
-```
-
-Current known implementations include `bluebird`, `q`, `when`, `rsvp`, `es6-promise`, `promise`, `native-promise-only`, `pinkie`, `vow` and `lie`. If you are not using a known implementation, you can use another registration method described below.
-
-
-#### Basic Registration
-
-As an alternative to registration shortcuts, you can call the `register` function with the preferred `Promise` implementation. The benefit of this approach is that a `Promise` library can be required by name without being a known implementation.  This approach does NOT work in the browser. To use `any-promise` in the browser use either registration shortcuts or specify the `Promise` constructor using advanced registration (see below).
-
-```javascript
-require('any-promise/register')('when')
-// -or- require('any-promise/register')('any other ES6 compatible library (known or otherwise)')
-```
-
-This registration method will try to detect the `Promise` constructor from requiring the specified implementation.  If you would like to specify your own constructor, see advanced registration.
-
-
-#### Advanced Registration
-
-To use the browser version, you should either install a polyfill or explicitly register the `Promise` constructor:
-
-```javascript
-require('any-promise/register')('bluebird', {Promise: require('bluebird')})
-```
-
-This could also be used for registering a custom `Promise` implementation or subclass.
-
-Your preference will be registered globally, allowing a single registration even if multiple versions of `any-promise` are installed in the NPM dependency tree or are using multiple bundled JavaScript files in the browser. You can bypass this global registration in options:
-
-
-```javascript
-require('../register')('es6-promise', {Promise: require('es6-promise').Promise, global: false})
-```
-
-### Library Usage
-
-To use any `Promise` constructor, simply require it:
-
-```javascript
-var Promise = require('any-promise');
-
-return Promise
-  .all([xf, f, init, coll])
-  .then(fn);
-
-
-return new Promise(function(resolve, reject){
-  try {
-    resolve(item);
-  } catch(e){
-    reject(e);
-  }
-});
-
-```
-
-Except noted below, libraries using `any-promise` should only use [documented](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise) functions as there is no guarantee which implementation will be chosen by the application author.  Libraries should never call `register`, only the application user should call if desired.
-
-
-#### Advanced Library Usage
-
-If your library needs to branch code based on the registered implementation, you can retrieve it using `var impl = require('any-promise/implementation')`, where `impl` will be the package name (`"bluebird"`, `"when"`, etc.) if registered, `"global.Promise"` if using the global version on Node.js, or `"window.Promise"` if using the browser version. You should always include a default case, as there is no guarantee what package may be registered.
-
-
-### Support for old Node.js versions
-
-Node.js versions prior to `v0.12` may have contained buggy versions of the global `Promise`. For this reason, the global `Promise` is not loaded automatically for these old versions.  If using `any-promise` in Node.js versions versions `<= v0.12`, the user should register a desired implementation.
-
-If an implementation is not registered, `any-promise` will attempt to discover an installed `Promise` implementation.  If no implementation can be found, an error will be thrown on `require('any-promise')`.  While the auto-discovery usually avoids errors, it is non-deterministic. It is recommended that the user always register a preferred implementation for older Node.js versions.
-
-This auto-discovery is only available for Node.jS versions prior to `v0.12`. Any newer versions will always default to the global `Promise` implementation.
-
-### Related
-
-- [any-observable](https://github.com/sindresorhus/any-observable) - `any-promise` for Observables.
-
+Released under the [MIT License](LICENSE.md).
