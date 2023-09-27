@@ -1,41 +1,19 @@
 {
-  "name": "@vue/reactivity",
-  "version": "3.1.5",
-  "description": "@vue/reactivity",
-  "main": "index.js",
-  "module": "dist/reactivity.esm-bundler.js",
-  "types": "dist/reactivity.d.ts",
-  "unpkg": "dist/reactivity.global.js",
-  "jsdelivr": "dist/reactivity.global.js",
-  "files": [
-    "index.js",
-    "dist"
-  ],
-  "sideEffects": false,
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/vuejs/vue-next.git",
-    "directory": "packages/reactivity"
-  },
-  "buildOptions": {
-    "name": "VueReactivity",
-    "formats": [
-      "esm-bundler",
-      "esm-browser",
-      "cjs",
-      "global"
-    ]
-  },
-  "keywords": [
-    "vue"
-  ],
-  "author": "Evan You",
-  "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/vuejs/vue-next/issues"
-  },
-  "homepage": "https://github.com/vuejs/vue-next/tree/master/packages/reactivity#readme",
-  "dependencies": {
-    "@vue/shared": "3.1.5"
-  }
+    "name": "alpinejs",
+    "version": "3.12.0",
+    "description": "The rugged, minimal JavaScript framework",
+    "homepage": "https://alpinejs.dev",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/alpinejs/alpine.git",
+        "directory": "packages/alpinejs"
+    },
+    "author": "Caleb Porzio",
+    "license": "MIT",
+    "main": "dist/module.cjs.js",
+    "module": "dist/module.esm.js",
+    "unpkg": "dist/cdn.min.js",
+    "dependencies": {
+        "@vue/reactivity": "~3.1.1"
+    }
 }

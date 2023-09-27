@@ -1,3 +1,3 @@
-import registerFocusPlugin from '../src/index.js'
+import Alpine from './../src/index'
 
-export default registerFocusPlugin
+export default Alpine
