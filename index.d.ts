@@ -1,4 +1,9 @@
-import AsyncProvider from './async';
-import StreamProvider from './stream';
-import SyncProvider from './sync';
-export { AsyncProvider, StreamProvider, SyncProvider };
+declare function plugin(options?: Partial<{ className: string; target: 'modern' | 'legacy' }>): {
+  handler: () => void
+}
+
+declare namespace plugin {
+  const __isOptionsFunction: true
+}
+
+export = plugin

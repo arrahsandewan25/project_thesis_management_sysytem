@@ -1,44 +1,59 @@
 {
-  "name": "@nodelib/fs.walk",
-  "version": "1.2.8",
-  "description": "A library for efficiently walking a directory recursively",
-  "license": "MIT",
-  "repository": "https://github.com/nodelib/nodelib/tree/master/packages/fs/fs.walk",
-  "keywords": [
-    "NodeLib",
-    "fs",
-    "FileSystem",
-    "file system",
-    "walk",
-    "scanner",
-    "crawler"
-  ],
-  "engines": {
-    "node": ">= 8"
-  },
+  "name": "@tailwindcss/typography",
+  "version": "0.5.9",
+  "description": "A Tailwind CSS plugin for automatically styling plain HTML content with beautiful typographic defaults.",
+  "main": "src/index.js",
+  "types": "src/index.d.ts",
   "files": [
-    "out/**",
-    "!out/**/*.map",
-    "!out/**/*.spec.*",
-    "!out/**/tests/**"
+    "src/*.js",
+    "src/*.d.ts",
+    "dist/"
   ],
-  "main": "out/index.js",
-  "typings": "out/index.d.ts",
-  "scripts": {
-    "clean": "rimraf {tsconfig.tsbuildinfo,out}",
-    "lint": "eslint \"src/**/*.ts\" --cache",
-    "compile": "tsc -b .",
-    "compile:watch": "tsc -p . --watch --sourceMap",
-    "test": "mocha \"out/**/*.spec.js\" -s 0",
-    "build": "npm run clean && npm run compile && npm run lint && npm test",
-    "watch": "npm run clean && npm run compile:watch"
+  "repository": "https://github.com/tailwindcss/typography",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
   },
-  "dependencies": {
-    "@nodelib/fs.scandir": "2.1.5",
-    "fastq": "^1.6.0"
+  "prettier": {
+    "printWidth": 100,
+    "semi": false,
+    "singleQuote": true,
+    "trailingComma": "es5"
+  },
+  "scripts": {
+    "test": "jest",
+    "dev": "next dev demo",
+    "build": "next build demo",
+    "export": "next export demo",
+    "start": "next start demo"
+  },
+  "peerDependencies": {
+    "tailwindcss": ">=3.0.0 || insiders"
   },
   "devDependencies": {
-    "@nodelib/fs.macchiato": "1.0.4"
+    "@mdx-js/loader": "^1.0.19",
+    "@mdx-js/mdx": "^1.6.6",
+    "@next/mdx": "^8.1.0",
+    "autoprefixer": "^10.2.1",
+    "highlight.js": "^10.4.1",
+    "jest": "^26.6.1",
+    "jest-diff": "^27.3.1",
+    "next": "^12.0.1",
+    "postcss": "^8.2.3",
+    "prettier": "^2.1.2",
+    "react": "^17.0.2",
+    "react-dom": "^17.0.2",
+    "tailwindcss": "^3.2.2"
   },
-  "gitHead": "1e5bad48565da2b06b8600e744324ea240bf49d8"
+  "dependencies": {
+    "lodash.castarray": "^4.4.0",
+    "lodash.isplainobject": "^4.0.6",
+    "lodash.merge": "^4.6.2",
+    "postcss-selector-parser": "6.0.10"
+  },
+  "jest": {
+    "setupFilesAfterEnv": [
+      "<rootDir>/jest/customMatchers.js"
+    ]
+  }
 }
