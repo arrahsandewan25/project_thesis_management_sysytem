@@ -1,200 +1,215 @@
-# @jridgewell/sourcemap-codec
+# @nodelib/fs.walk
 
-Encode/decode the `mappings` property of a [sourcemap](https://docs.google.com/document/d/1U1RGAehQwRypUTovF1KRlpiOFze0b-_2gc6fAH0KY0k/edit).
+> A library for efficiently walking a directory recursively.
 
+## :bulb: Highlights
 
-## Why?
+* :moneybag: Returns useful information: `name`, `path`, `dirent` and `stats` (optional).
+* :rocket: On Node.js 10.10+ uses the mechanism without additional calls to determine the entry type for performance reasons. See [`old` and `modern` mode](https://github.com/nodelib/nodelib/blob/master/packages/fs/fs.scandir/README.md#old-and-modern-mode).
+* :gear: Built-in directories/files and error filtering system.
+* :link: Can safely work with broken symbolic links.
 
-Sourcemaps are difficult to generate and manipulate, because the `mappings` property – the part that actually links the generated code back to the original source – is encoded using an obscure method called [Variable-length quantity](https://en.wikipedia.org/wiki/Variable-length_quantity). On top of that, each segment in the mapping contains offsets rather than absolute indices, which means that you can't look at a segment in isolation – you have to understand the whole sourcemap.
+## Install
 
-This package makes the process slightly easier.
-
-
-## Installation
-
-```bash
-npm install @jridgewell/sourcemap-codec
+```console
+npm install @nodelib/fs.walk
 ```
-
 
 ## Usage
 
-```js
-import { encode, decode } from '@jridgewell/sourcemap-codec';
+```ts
+import * as fsWalk from '@nodelib/fs.walk';
 
-var decoded = decode( ';EAEEA,EAAE,EAAC,CAAE;ECQY,UACC' );
-
-assert.deepEqual( decoded, [
-	// the first line (of the generated code) has no mappings,
-	// as shown by the starting semi-colon (which separates lines)
-	[],
-
-	// the second line contains four (comma-separated) segments
-	[
-		// segments are encoded as you'd expect:
-		// [ generatedCodeColumn, sourceIndex, sourceCodeLine, sourceCodeColumn, nameIndex ]
-
-		// i.e. the first segment begins at column 2, and maps back to the second column
-		// of the second line (both zero-based) of the 0th source, and uses the 0th
-		// name in the `map.names` array
-		[ 2, 0, 2, 2, 0 ],
-
-		// the remaining segments are 4-length rather than 5-length,
-		// because they don't map a name
-		[ 4, 0, 2, 4 ],
-		[ 6, 0, 2, 5 ],
-		[ 7, 0, 2, 7 ]
-	],
-
-	// the final line contains two segments
-	[
-		[ 2, 1, 10, 19 ],
-		[ 12, 1, 11, 20 ]
-	]
-]);
-
-var encoded = encode( decoded );
-assert.equal( encoded, ';EAEEA,EAAE,EAAC,CAAE;ECQY,UACC' );
+fsWalk.walk('path', (error, entries) => { /* … */ });
 ```
 
-## Benchmarks
+## API
 
-```
-node v18.0.0
+### .walk(path, [optionsOrSettings], callback)
 
-amp.js.map - 45120 segments
+Reads the directory recursively and asynchronously. Requires a callback function.
 
-Decode Memory Usage:
-@jridgewell/sourcemap-codec       5479160 bytes
-sourcemap-codec                   5659336 bytes
-source-map-0.6.1                 17144440 bytes
-source-map-0.8.0                  6867424 bytes
-Smallest memory usage is @jridgewell/sourcemap-codec
+> :book: If you want to use the Promise API, use `util.promisify`.
 
-Decode speed:
-decode: @jridgewell/sourcemap-codec x 502 ops/sec ±1.03% (90 runs sampled)
-decode: sourcemap-codec x 445 ops/sec ±0.97% (92 runs sampled)
-decode: source-map-0.6.1 x 36.01 ops/sec ±1.64% (49 runs sampled)
-decode: source-map-0.8.0 x 367 ops/sec ±0.04% (95 runs sampled)
-Fastest is decode: @jridgewell/sourcemap-codec
-
-Encode Memory Usage:
-@jridgewell/sourcemap-codec       1261620 bytes
-sourcemap-codec                   9119248 bytes
-source-map-0.6.1                  8968560 bytes
-source-map-0.8.0                  8952952 bytes
-Smallest memory usage is @jridgewell/sourcemap-codec
-
-Encode speed:
-encode: @jridgewell/sourcemap-codec x 738 ops/sec ±0.42% (98 runs sampled)
-encode: sourcemap-codec x 238 ops/sec ±0.73% (88 runs sampled)
-encode: source-map-0.6.1 x 162 ops/sec ±0.43% (84 runs sampled)
-encode: source-map-0.8.0 x 191 ops/sec ±0.34% (90 runs sampled)
-Fastest is encode: @jridgewell/sourcemap-codec
-
-
-***
-
-
-babel.min.js.map - 347793 segments
-
-Decode Memory Usage:
-@jridgewell/sourcemap-codec      35338184 bytes
-sourcemap-codec                  35922736 bytes
-source-map-0.6.1                 62366360 bytes
-source-map-0.8.0                 44337416 bytes
-Smallest memory usage is @jridgewell/sourcemap-codec
-
-Decode speed:
-decode: @jridgewell/sourcemap-codec x 40.35 ops/sec ±4.47% (54 runs sampled)
-decode: sourcemap-codec x 36.76 ops/sec ±3.67% (51 runs sampled)
-decode: source-map-0.6.1 x 4.44 ops/sec ±2.15% (16 runs sampled)
-decode: source-map-0.8.0 x 59.35 ops/sec ±0.05% (78 runs sampled)
-Fastest is decode: source-map-0.8.0
-
-Encode Memory Usage:
-@jridgewell/sourcemap-codec       7212604 bytes
-sourcemap-codec                  21421456 bytes
-source-map-0.6.1                 25286888 bytes
-source-map-0.8.0                 25498744 bytes
-Smallest memory usage is @jridgewell/sourcemap-codec
-
-Encode speed:
-encode: @jridgewell/sourcemap-codec x 112 ops/sec ±0.13% (84 runs sampled)
-encode: sourcemap-codec x 30.23 ops/sec ±2.76% (53 runs sampled)
-encode: source-map-0.6.1 x 19.43 ops/sec ±3.70% (37 runs sampled)
-encode: source-map-0.8.0 x 19.40 ops/sec ±3.26% (37 runs sampled)
-Fastest is encode: @jridgewell/sourcemap-codec
-
-
-***
-
-
-preact.js.map - 1992 segments
-
-Decode Memory Usage:
-@jridgewell/sourcemap-codec        500272 bytes
-sourcemap-codec                    516864 bytes
-source-map-0.6.1                  1596672 bytes
-source-map-0.8.0                   517272 bytes
-Smallest memory usage is @jridgewell/sourcemap-codec
-
-Decode speed:
-decode: @jridgewell/sourcemap-codec x 16,137 ops/sec ±0.17% (99 runs sampled)
-decode: sourcemap-codec x 12,139 ops/sec ±0.13% (99 runs sampled)
-decode: source-map-0.6.1 x 1,264 ops/sec ±0.12% (100 runs sampled)
-decode: source-map-0.8.0 x 9,894 ops/sec ±0.08% (101 runs sampled)
-Fastest is decode: @jridgewell/sourcemap-codec
-
-Encode Memory Usage:
-@jridgewell/sourcemap-codec        321026 bytes
-sourcemap-codec                    830832 bytes
-source-map-0.6.1                   586608 bytes
-source-map-0.8.0                   586680 bytes
-Smallest memory usage is @jridgewell/sourcemap-codec
-
-Encode speed:
-encode: @jridgewell/sourcemap-codec x 19,876 ops/sec ±0.78% (95 runs sampled)
-encode: sourcemap-codec x 6,983 ops/sec ±0.15% (100 runs sampled)
-encode: source-map-0.6.1 x 5,070 ops/sec ±0.12% (102 runs sampled)
-encode: source-map-0.8.0 x 5,641 ops/sec ±0.17% (100 runs sampled)
-Fastest is encode: @jridgewell/sourcemap-codec
-
-
-***
-
-
-react.js.map - 5726 segments
-
-Decode Memory Usage:
-@jridgewell/sourcemap-codec        734848 bytes
-sourcemap-codec                    954200 bytes
-source-map-0.6.1                  2276432 bytes
-source-map-0.8.0                   955488 bytes
-Smallest memory usage is @jridgewell/sourcemap-codec
-
-Decode speed:
-decode: @jridgewell/sourcemap-codec x 5,723 ops/sec ±0.12% (98 runs sampled)
-decode: sourcemap-codec x 4,555 ops/sec ±0.09% (101 runs sampled)
-decode: source-map-0.6.1 x 437 ops/sec ±0.11% (93 runs sampled)
-decode: source-map-0.8.0 x 3,441 ops/sec ±0.15% (100 runs sampled)
-Fastest is decode: @jridgewell/sourcemap-codec
-
-Encode Memory Usage:
-@jridgewell/sourcemap-codec        638672 bytes
-sourcemap-codec                   1109840 bytes
-source-map-0.6.1                  1321224 bytes
-source-map-0.8.0                  1324448 bytes
-Smallest memory usage is @jridgewell/sourcemap-codec
-
-Encode speed:
-encode: @jridgewell/sourcemap-codec x 6,801 ops/sec ±0.48% (98 runs sampled)
-encode: sourcemap-codec x 2,533 ops/sec ±0.13% (101 runs sampled)
-encode: source-map-0.6.1 x 2,248 ops/sec ±0.08% (100 runs sampled)
-encode: source-map-0.8.0 x 2,303 ops/sec ±0.15% (100 runs sampled)
-Fastest is encode: @jridgewell/sourcemap-codec
+```ts
+fsWalk.walk('path', (error, entries) => { /* … */ });
+fsWalk.walk('path', {}, (error, entries) => { /* … */ });
+fsWalk.walk('path', new fsWalk.Settings(), (error, entries) => { /* … */ });
 ```
 
-# License
+### .walkStream(path, [optionsOrSettings])
 
-MIT
+Reads the directory recursively and asynchronously. [Readable Stream](https://nodejs.org/dist/latest-v12.x/docs/api/stream.html#stream_readable_streams) is used as a provider.
+
+```ts
+const stream = fsWalk.walkStream('path');
+const stream = fsWalk.walkStream('path', {});
+const stream = fsWalk.walkStream('path', new fsWalk.Settings());
+```
+
+### .walkSync(path, [optionsOrSettings])
+
+Reads the directory recursively and synchronously. Returns an array of entries.
+
+```ts
+const entries = fsWalk.walkSync('path');
+const entries = fsWalk.walkSync('path', {});
+const entries = fsWalk.walkSync('path', new fsWalk.Settings());
+```
+
+#### path
+
+* Required: `true`
+* Type: `string | Buffer | URL`
+
+A path to a file. If a URL is provided, it must use the `file:` protocol.
+
+#### optionsOrSettings
+
+* Required: `false`
+* Type: `Options | Settings`
+* Default: An instance of `Settings` class
+
+An [`Options`](#options) object or an instance of [`Settings`](#settings) class.
+
+> :book: When you pass a plain object, an instance of the `Settings` class will be created automatically. If you plan to call the method frequently, use a pre-created instance of the `Settings` class.
+
+### Settings([options])
+
+A class of full settings of the package.
+
+```ts
+const settings = new fsWalk.Settings({ followSymbolicLinks: true });
+
+const entries = fsWalk.walkSync('path', settings);
+```
+
+## Entry
+
+* `name` — The name of the entry (`unknown.txt`).
+* `path` — The path of the entry relative to call directory (`root/unknown.txt`).
+* `dirent` — An instance of [`fs.Dirent`](./src/types/index.ts) class.
+* [`stats`] — An instance of `fs.Stats` class.
+
+## Options
+
+### basePath
+
+* Type: `string`
+* Default: `undefined`
+
+By default, all paths are built relative to the root path. You can use this option to set custom root path.
+
+In the example below we read the files from the `root` directory, but in the results the root path will be `custom`.
+
+```ts
+fsWalk.walkSync('root'); // → ['root/file.txt']
+fsWalk.walkSync('root', { basePath: 'custom' }); // → ['custom/file.txt']
+```
+
+### concurrency
+
+* Type: `number`
+* Default: `Infinity`
+
+The maximum number of concurrent calls to `fs.readdir`.
+
+> :book: The higher the number, the higher performance and the load on the File System. If you want to read in quiet mode, set the value to `4 * os.cpus().length` (4 is default size of [thread pool work scheduling](http://docs.libuv.org/en/v1.x/threadpool.html#thread-pool-work-scheduling)).
+
+### deepFilter
+
+* Type: [`DeepFilterFunction`](./src/settings.ts)
+* Default: `undefined`
+
+A function that indicates whether the directory will be read deep or not.
+
+```ts
+// Skip all directories that starts with `node_modules`
+const filter: DeepFilterFunction = (entry) => !entry.path.startsWith('node_modules');
+```
+
+### entryFilter
+
+* Type: [`EntryFilterFunction`](./src/settings.ts)
+* Default: `undefined`
+
+A function that indicates whether the entry will be included to results or not.
+
+```ts
+// Exclude all `.js` files from results
+const filter: EntryFilterFunction = (entry) => !entry.name.endsWith('.js');
+```
+
+### errorFilter
+
+* Type: [`ErrorFilterFunction`](./src/settings.ts)
+* Default: `undefined`
+
+A function that allows you to skip errors that occur when reading directories.
+
+For example, you can skip `ENOENT` errors if required:
+
+```ts
+// Skip all ENOENT errors
+const filter: ErrorFilterFunction = (error) => error.code == 'ENOENT';
+```
+
+### stats
+
+* Type: `boolean`
+* Default: `false`
+
+Adds an instance of `fs.Stats` class to the [`Entry`](#entry).
+
+> :book: Always use `fs.readdir` with additional `fs.lstat/fs.stat` calls to determine the entry type.
+
+### followSymbolicLinks
+
+* Type: `boolean`
+* Default: `false`
+
+Follow symbolic links or not. Call `fs.stat` on symbolic link if `true`.
+
+### `throwErrorOnBrokenSymbolicLink`
+
+* Type: `boolean`
+* Default: `true`
+
+Throw an error when symbolic link is broken if `true` or safely return `lstat` call if `false`.
+
+### `pathSegmentSeparator`
+
+* Type: `string`
+* Default: `path.sep`
+
+By default, this package uses the correct path separator for your OS (`\` on Windows, `/` on Unix-like systems). But you can set this option to any separator character(s) that you want to use instead.
+
+### `fs`
+
+* Type: `FileSystemAdapter`
+* Default: A default FS methods
+
+By default, the built-in Node.js module (`fs`) is used to work with the file system. You can replace any method with your own.
+
+```ts
+interface FileSystemAdapter {
+	lstat: typeof fs.lstat;
+	stat: typeof fs.stat;
+	lstatSync: typeof fs.lstatSync;
+	statSync: typeof fs.statSync;
+	readdir: typeof fs.readdir;
+	readdirSync: typeof fs.readdirSync;
+}
+
+const settings = new fsWalk.Settings({
+	fs: { lstat: fakeLstat }
+});
+```
+
+## Changelog
+
+See the [Releases section of our GitHub project](https://github.com/nodelib/nodelib/releases) for changelog for each release version.
+
+## License
+
+This software is released under the terms of the MIT license.
