@@ -1,26 +1,19 @@
-<p>
-  <a href="https://tailwindcss.com/docs/typography-plugin#gh-light-mode-only" target="_blank">
-    <img src="./.github/logo-light.svg" alt="Tailwind CSS Typography" width="450" height="70">
-  </a>
-  <a href="https://tailwindcss.com/docs/typography-plugin#gh-dark-mode-only" target="_blank">
-    <img src="./.github/logo-dark.svg" alt="Tailwind CSS Typography" width="450" height="70">
-  </a>
-</p>
+# @vue/reactivity
 
-A plugin that provides a set of `prose` classes you can use to add beautiful typographic defaults to any vanilla HTML you don't control, like HTML rendered from Markdown, or pulled from a CMS.
+## Usage Note
 
----
+This package is inlined into Global & Browser ESM builds of user-facing renderers (e.g. `@vue/runtime-dom`), but also published as a package that can be used standalone. The standalone build should not be used alongside a pre-bundled build of a user-facing renderer, as they will have different internal storage for reactivity connections. A user-facing renderer should re-export all APIs from this package.
 
-## Documentation
+For full exposed APIs, see `src/index.ts`. You can also run `yarn build reactivity --types` from repo root, which will generate an API report at `temp/reactivity.api.md`.
 
-For full documentation, visit [tailwindcss.com/docs/typography-plugin](https://tailwindcss.com/docs/typography-plugin).
+## Credits
 
-## Community
+The implementation of this module is inspired by the following prior art in the JavaScript ecosystem:
 
-For help, discussion about best practices, or any other conversation that would benefit from being searchable:
+- [Meteor Tracker](https://docs.meteor.com/api/tracker.html)
+- [nx-js/observer-util](https://github.com/nx-js/observer-util)
+- [salesforce/observable-membrane](https://github.com/salesforce/observable-membrane)
 
-[Discuss the Tailwind CSS Typography plugin on GitHub](https://github.com/tailwindlabs/tailwindcss/discussions)
+## Caveats
 
-For casual chit-chat with others using the framework:
-
-[Join the Tailwind CSS Discord Server](https://tailwindcss.com/discord)
+- Built-in objects are not observed except for `Array`, `Map`, `WeakMap`, `Set` and `WeakSet`.
