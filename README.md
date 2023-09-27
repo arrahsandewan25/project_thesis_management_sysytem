@@ -1,317 +1,233 @@
-# Arg
+# asynckit [![NPM Module](https://img.shields.io/npm/v/asynckit.svg?style=flat)](https://www.npmjs.com/package/asynckit)
 
-`arg` is an unopinionated, no-frills CLI argument parser.
+Minimal async jobs utility library, with streams support.
 
-## Installation
+[![PhantomJS Build](https://img.shields.io/travis/alexindigo/asynckit/v0.4.0.svg?label=browser&style=flat)](https://travis-ci.org/alexindigo/asynckit)
+[![Linux Build](https://img.shields.io/travis/alexindigo/asynckit/v0.4.0.svg?label=linux:0.12-6.x&style=flat)](https://travis-ci.org/alexindigo/asynckit)
+[![Windows Build](https://img.shields.io/appveyor/ci/alexindigo/asynckit/v0.4.0.svg?label=windows:0.12-6.x&style=flat)](https://ci.appveyor.com/project/alexindigo/asynckit)
 
-```bash
-npm install arg
+[![Coverage Status](https://img.shields.io/coveralls/alexindigo/asynckit/v0.4.0.svg?label=code+coverage&style=flat)](https://coveralls.io/github/alexindigo/asynckit?branch=master)
+[![Dependency Status](https://img.shields.io/david/alexindigo/asynckit/v0.4.0.svg?style=flat)](https://david-dm.org/alexindigo/asynckit)
+[![bitHound Overall Score](https://www.bithound.io/github/alexindigo/asynckit/badges/score.svg)](https://www.bithound.io/github/alexindigo/asynckit)
+
+<!-- [![Readme](https://img.shields.io/badge/readme-tested-brightgreen.svg?style=flat)](https://www.npmjs.com/package/reamde) -->
+
+AsyncKit provides harness for `parallel` and `serial` iterators over list of items represented by arrays or objects.
+Optionally it accepts abort function (should be synchronously return by iterator for each item), and terminates left over jobs upon an error event. For specific iteration order built-in (`ascending` and `descending`) and custom sort helpers also supported, via `asynckit.serialOrdered` method.
+
+It ensures async operations to keep behavior more stable and prevent `Maximum call stack size exceeded` errors, from sync iterators.
+
+| compression        |     size |
+| :----------------- | -------: |
+| asynckit.js        | 12.34 kB |
+| asynckit.min.js    |  4.11 kB |
+| asynckit.min.js.gz |  1.47 kB |
+
+
+## Install
+
+```sh
+$ npm install --save asynckit
 ```
 
-## Usage
+## Examples
 
-`arg()` takes either 1 or 2 arguments:
+### Parallel Jobs
 
-1. Command line specification object (see below)
-2. Parse options (_Optional_, defaults to `{permissive: false, argv: process.argv.slice(2), stopAtPositional: false}`)
+Runs iterator over provided array in parallel. Stores output in the `result` array,
+on the matching positions. In unlikely event of an error from one of the jobs,
+will terminate rest of the active jobs (if abort function is provided)
+and return error along with salvaged data to the main callback function.
 
-It returns an object with any values present on the command-line (missing options are thus
-missing from the resulting object). Arg performs no validation/requirement checking - we
-leave that up to the application.
-
-All parameters that aren't consumed by options (commonly referred to as "extra" parameters)
-are added to `result._`, which is _always_ an array (even if no extra parameters are passed,
-in which case an empty array is returned).
+#### Input Array
 
 ```javascript
-const arg = require('arg');
+var parallel = require('asynckit').parallel
+  , assert   = require('assert')
+  ;
 
-// `options` is an optional parameter
-const args = arg(
-	spec,
-	(options = { permissive: false, argv: process.argv.slice(2) })
-);
-```
+var source         = [ 1, 1, 4, 16, 64, 32, 8, 2 ]
+  , expectedResult = [ 2, 2, 8, 32, 128, 64, 16, 4 ]
+  , expectedTarget = [ 1, 1, 2, 4, 8, 16, 32, 64 ]
+  , target         = []
+  ;
 
-For example:
-
-```console
-$ node ./hello.js --verbose -vvv --port=1234 -n 'My name' foo bar --tag qux --tag=qix -- --foobar
-```
-
-```javascript
-// hello.js
-const arg = require('arg');
-
-const args = arg({
-	// Types
-	'--help': Boolean,
-	'--version': Boolean,
-	'--verbose': arg.COUNT, // Counts the number of times --verbose is passed
-	'--port': Number, // --port <number> or --port=<number>
-	'--name': String, // --name <string> or --name=<string>
-	'--tag': [String], // --tag <string> or --tag=<string>
-
-	// Aliases
-	'-v': '--verbose',
-	'-n': '--name', // -n <string>; result is stored in --name
-	'--label': '--name' // --label <string> or --label=<string>;
-	//     result is stored in --name
+parallel(source, asyncJob, function(err, result)
+{
+  assert.deepEqual(result, expectedResult);
+  assert.deepEqual(target, expectedTarget);
 });
 
-console.log(args);
-/*
+// async job accepts one element from the array
+// and a callback function
+function asyncJob(item, cb)
 {
-	_: ["foo", "bar", "--foobar"],
-	'--port': 1234,
-	'--verbose': 4,
-	'--name': "My name",
-	'--tag': ["qux", "qix"]
+  // different delays (in ms) per item
+  var delay = item * 25;
+
+  // pretend different jobs take different time to finish
+  // and not in consequential order
+  var timeoutId = setTimeout(function() {
+    target.push(item);
+    cb(null, item * 2);
+  }, delay);
+
+  // allow to cancel "leftover" jobs upon error
+  // return function, invoking of which will abort this job
+  return clearTimeout.bind(null, timeoutId);
 }
-*/
 ```
 
-The values for each key=&gt;value pair is either a type (function or [function]) or a string (indicating an alias).
+More examples could be found in [test/test-parallel-array.js](test/test-parallel-array.js).
 
-- In the case of a function, the string value of the argument's value is passed to it,
-  and the return value is used as the ultimate value.
+#### Input Object
 
-- In the case of an array, the only element _must_ be a type function. Array types indicate
-  that the argument may be passed multiple times, and as such the resulting value in the returned
-  object is an array with all of the values that were passed using the specified flag.
-
-- In the case of a string, an alias is established. If a flag is passed that matches the _key_,
-  then the _value_ is substituted in its place.
-
-Type functions are passed three arguments:
-
-1. The parameter value (always a string)
-2. The parameter name (e.g. `--label`)
-3. The previous value for the destination (useful for reduce-like operations or for supporting `-v` multiple times, etc.)
-
-This means the built-in `String`, `Number`, and `Boolean` type constructors "just work" as type functions.
-
-Note that `Boolean` and `[Boolean]` have special treatment - an option argument is _not_ consumed or passed, but instead `true` is
-returned. These options are called "flags".
-
-For custom handlers that wish to behave as flags, you may pass the function through `arg.flag()`:
+Also it supports named jobs, listed via object.
 
 ```javascript
-const arg = require('arg');
+var parallel = require('asynckit/parallel')
+  , assert   = require('assert')
+  ;
 
-const argv = [
-	'--foo',
-	'bar',
-	'-ff',
-	'baz',
-	'--foo',
-	'--foo',
-	'qux',
-	'-fff',
-	'qix'
-];
+var source         = { first: 1, one: 1, four: 4, sixteen: 16, sixtyFour: 64, thirtyTwo: 32, eight: 8, two: 2 }
+  , expectedResult = { first: 2, one: 2, four: 8, sixteen: 32, sixtyFour: 128, thirtyTwo: 64, eight: 16, two: 4 }
+  , expectedTarget = [ 1, 1, 2, 4, 8, 16, 32, 64 ]
+  , expectedKeys   = [ 'first', 'one', 'two', 'four', 'eight', 'sixteen', 'thirtyTwo', 'sixtyFour' ]
+  , target         = []
+  , keys           = []
+  ;
 
-function myHandler(value, argName, previousValue) {
-	/* `value` is always `true` */
-	return 'na ' + (previousValue || 'batman!');
-}
-
-const args = arg(
-	{
-		'--foo': arg.flag(myHandler),
-		'-f': '--foo'
-	},
-	{
-		argv
-	}
-);
-
-console.log(args);
-/*
+parallel(source, asyncJob, function(err, result)
 {
-	_: ['bar', 'baz', 'qux', 'qix'],
-	'--foo': 'na na na na na na na na batman!'
-}
-*/
-```
+  assert.deepEqual(result, expectedResult);
+  assert.deepEqual(target, expectedTarget);
+  assert.deepEqual(keys, expectedKeys);
+});
 
-As well, `arg` supplies a helper argument handler called `arg.COUNT`, which equivalent to a `[Boolean]` argument's `.length`
-property - effectively counting the number of times the boolean flag, denoted by the key, is passed on the command line..
-For example, this is how you could implement `ssh`'s multiple levels of verbosity (`-vvvv` being the most verbose).
-
-```javascript
-const arg = require('arg');
-
-const argv = ['-AAAA', '-BBBB'];
-
-const args = arg(
-	{
-		'-A': arg.COUNT,
-		'-B': [Boolean]
-	},
-	{
-		argv
-	}
-);
-
-console.log(args);
-/*
+// supports full value, key, callback (shortcut) interface
+function asyncJob(item, key, cb)
 {
-	_: [],
-	'-A': 4,
-	'-B': [true, true, true, true]
-}
-*/
-```
+  // different delays (in ms) per item
+  var delay = item * 25;
 
-### Options
+  // pretend different jobs take different time to finish
+  // and not in consequential order
+  var timeoutId = setTimeout(function() {
+    keys.push(key);
+    target.push(item);
+    cb(null, item * 2);
+  }, delay);
 
-If a second parameter is specified and is an object, it specifies parsing options to modify the behavior of `arg()`.
-
-#### `argv`
-
-If you have already sliced or generated a number of raw arguments to be parsed (as opposed to letting `arg`
-slice them from `process.argv`) you may specify them in the `argv` option.
-
-For example:
-
-```javascript
-const args = arg(
-	{
-		'--foo': String
-	},
-	{
-		argv: ['hello', '--foo', 'world']
-	}
-);
-```
-
-results in:
-
-```javascript
-const args = {
-	_: ['hello'],
-	'--foo': 'world'
-};
-```
-
-#### `permissive`
-
-When `permissive` set to `true`, `arg` will push any unknown arguments
-onto the "extra" argument array (`result._`) instead of throwing an error about
-an unknown flag.
-
-For example:
-
-```javascript
-const arg = require('arg');
-
-const argv = [
-	'--foo',
-	'hello',
-	'--qux',
-	'qix',
-	'--bar',
-	'12345',
-	'hello again'
-];
-
-const args = arg(
-	{
-		'--foo': String,
-		'--bar': Number
-	},
-	{
-		argv,
-		permissive: true
-	}
-);
-```
-
-results in:
-
-```javascript
-const args = {
-	_: ['--qux', 'qix', 'hello again'],
-	'--foo': 'hello',
-	'--bar': 12345
-};
-```
-
-#### `stopAtPositional`
-
-When `stopAtPositional` is set to `true`, `arg` will halt parsing at the first
-positional argument.
-
-For example:
-
-```javascript
-const arg = require('arg');
-
-const argv = ['--foo', 'hello', '--bar'];
-
-const args = arg(
-	{
-		'--foo': Boolean,
-		'--bar': Boolean
-	},
-	{
-		argv,
-		stopAtPositional: true
-	}
-);
-```
-
-results in:
-
-```javascript
-const args = {
-	_: ['hello', '--bar'],
-	'--foo': true
-};
-```
-
-### Errors
-
-Some errors that `arg` throws provide a `.code` property in order to aid in recovering from user error, or to
-differentiate between user error and developer error (bug).
-
-##### ARG_UNKNOWN_OPTION
-
-If an unknown option (not defined in the spec object) is passed, an error with code `ARG_UNKNOWN_OPTION` will be thrown:
-
-```js
-// cli.js
-try {
-	require('arg')({ '--hi': String });
-} catch (err) {
-	if (err.code === 'ARG_UNKNOWN_OPTION') {
-		console.log(err.message);
-	} else {
-		throw err;
-	}
+  // allow to cancel "leftover" jobs upon error
+  // return function, invoking of which will abort this job
+  return clearTimeout.bind(null, timeoutId);
 }
 ```
 
-```shell
-node cli.js --extraneous true
-Unknown or unexpected option: --extraneous
-```
+More examples could be found in [test/test-parallel-object.js](test/test-parallel-object.js).
 
-# FAQ
+### Serial Jobs
 
-A few questions and answers that have been asked before:
+Runs iterator over provided array sequentially. Stores output in the `result` array,
+on the matching positions. In unlikely event of an error from one of the jobs,
+will not proceed to the rest of the items in the list
+and return error along with salvaged data to the main callback function.
 
-### How do I require an argument with `arg`?
-
-Do the assertion yourself, such as:
+#### Input Array
 
 ```javascript
-const args = arg({ '--name': String });
+var serial = require('asynckit/serial')
+  , assert = require('assert')
+  ;
 
-if (!args['--name']) throw new Error('missing required argument: --name');
+var source         = [ 1, 1, 4, 16, 64, 32, 8, 2 ]
+  , expectedResult = [ 2, 2, 8, 32, 128, 64, 16, 4 ]
+  , expectedTarget = [ 0, 1, 2, 3, 4, 5, 6, 7 ]
+  , target         = []
+  ;
+
+serial(source, asyncJob, function(err, result)
+{
+  assert.deepEqual(result, expectedResult);
+  assert.deepEqual(target, expectedTarget);
+});
+
+// extended interface (item, key, callback)
+// also supported for arrays
+function asyncJob(item, key, cb)
+{
+  target.push(key);
+
+  // it will be automatically made async
+  // even it iterator "returns" in the same event loop
+  cb(null, item * 2);
+}
 ```
 
-# License
+More examples could be found in [test/test-serial-array.js](test/test-serial-array.js).
 
-Released under the [MIT License](LICENSE.md).
+#### Input Object
+
+Also it supports named jobs, listed via object.
+
+```javascript
+var serial = require('asynckit').serial
+  , assert = require('assert')
+  ;
+
+var source         = [ 1, 1, 4, 16, 64, 32, 8, 2 ]
+  , expectedResult = [ 2, 2, 8, 32, 128, 64, 16, 4 ]
+  , expectedTarget = [ 0, 1, 2, 3, 4, 5, 6, 7 ]
+  , target         = []
+  ;
+
+var source         = { first: 1, one: 1, four: 4, sixteen: 16, sixtyFour: 64, thirtyTwo: 32, eight: 8, two: 2 }
+  , expectedResult = { first: 2, one: 2, four: 8, sixteen: 32, sixtyFour: 128, thirtyTwo: 64, eight: 16, two: 4 }
+  , expectedTarget = [ 1, 1, 4, 16, 64, 32, 8, 2 ]
+  , target         = []
+  ;
+
+
+serial(source, asyncJob, function(err, result)
+{
+  assert.deepEqual(result, expectedResult);
+  assert.deepEqual(target, expectedTarget);
+});
+
+// shortcut interface (item, callback)
+// works for object as well as for the arrays
+function asyncJob(item, cb)
+{
+  target.push(item);
+
+  // it will be automatically made async
+  // even it iterator "returns" in the same event loop
+  cb(null, item * 2);
+}
+```
+
+More examples could be found in [test/test-serial-object.js](test/test-serial-object.js).
+
+_Note: Since _object_ is an _unordered_ collection of properties,
+it may produce unexpected results with sequential iterations.
+Whenever order of the jobs' execution is important please use `serialOrdered` method._
+
+### Ordered Serial Iterations
+
+TBD
+
+For example [compare-property](compare-property) package.
+
+### Streaming interface
+
+TBD
+
+## Want to Know More?
+
+More examples can be found in [test folder](test/).
+
+Or open an [issue](https://github.com/alexindigo/asynckit/issues) with questions and/or suggestions.
+
+## License
+
+AsyncKit is licensed under the MIT license.
