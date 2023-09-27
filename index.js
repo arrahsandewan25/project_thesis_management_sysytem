@@ -1,263 +1,200 @@
-'use strict';
+import { createFocusTrap } from 'focus-trap'
+import { focusable, isFocusable } from 'tabbable'
 
-class QuickLRU {
-	constructor(options = {}) {
-		if (!(options.maxSize && options.maxSize > 0)) {
-			throw new TypeError('`maxSize` must be a number greater than 0');
-		}
+export default function (Alpine) {
+    let lastFocused
+    let currentFocused
 
-		if (typeof options.maxAge === 'number' && options.maxAge === 0) {
-			throw new TypeError('`maxAge` must be a number greater than 0');
-		}
+    window.addEventListener('focusin', () => {
+        lastFocused = currentFocused
+        currentFocused = document.activeElement
+    })
 
-		this.maxSize = options.maxSize;
-		this.maxAge = options.maxAge || Infinity;
-		this.onEviction = options.onEviction;
-		this.cache = new Map();
-		this.oldCache = new Map();
-		this._size = 0;
-	}
+    Alpine.magic('focus', el => {
+        let within = el
 
-	_emitEvictions(cache) {
-		if (typeof this.onEviction !== 'function') {
-			return;
-		}
+        return {
+            __noscroll: false,
+            __wrapAround: false,
+            within(el) { within = el; return this },
+            withoutScrolling() { this.__noscroll = true; return this },
+            noscroll() { this.__noscroll = true; return this },
+            withWrapAround() { this.__wrapAround = true; return this },
+            wrap() { return this.withWrapAround() },
+            focusable(el) {
+                return isFocusable(el)
+            },
+            previouslyFocused() {
+                return lastFocused
+            },
+            lastFocused() {
+                return lastFocused
+            },
+            focused() {
+                return currentFocused
+            },
+            focusables() {
+                if (Array.isArray(within)) return within
 
-		for (const [key, item] of cache) {
-			this.onEviction(key, item.value);
-		}
-	}
+                return focusable(within, { displayCheck: 'none' })
+            },
+            all() { return this.focusables() },
+            isFirst(el) {
+                let els = this.all()
 
-	_deleteIfExpired(key, item) {
-		if (typeof item.expiry === 'number' && item.expiry <= Date.now()) {
-			if (typeof this.onEviction === 'function') {
-				this.onEviction(key, item.value);
-			}
+                return els[0] && els[0].isSameNode(el)
+            },
+            isLast(el) {
+                let els = this.all()
 
-			return this.delete(key);
-		}
+                return els.length && els.slice(-1)[0].isSameNode(el)
+            },
+            getFirst() { return this.all()[0] },
+            getLast() { return this.all().slice(-1)[0] },
+            getNext() {
+                let list = this.all()
+                let current = document.activeElement
 
-		return false;
-	}
+                // Can't find currently focusable element in list.
+                if (list.indexOf(current) === -1) return
 
-	_getOrDeleteIfExpired(key, item) {
-		const deleted = this._deleteIfExpired(key, item);
-		if (deleted === false) {
-			return item.value;
-		}
-	}
+                // This is the last element in the list and we want to wrap around.
+                if (this.__wrapAround && list.indexOf(current) === list.length - 1) {
+                    return list[0]
+                }
 
-	_getItemValue(key, item) {
-		return item.expiry ? this._getOrDeleteIfExpired(key, item) : item.value;
-	}
+                return list[list.indexOf(current) + 1]
+            },
+            getPrevious() {
+                let list = this.all()
+                let current = document.activeElement
 
-	_peek(key, cache) {
-		const item = cache.get(key);
+                // Can't find currently focusable element in list.
+                if (list.indexOf(current) === -1) return
 
-		return this._getItemValue(key, item);
-	}
+                // This is the first element in the list and we want to wrap around.
+                if (this.__wrapAround && list.indexOf(current) === 0) {
+                    return list.slice(-1)[0]
+                }
 
-	_set(key, value) {
-		this.cache.set(key, value);
-		this._size++;
+                return list[list.indexOf(current) - 1]
+            },
+            first() { this.focus(this.getFirst()) },
+            last() { this.focus(this.getLast()) },
+            next() { this.focus(this.getNext()) },
+            previous() { this.focus(this.getPrevious()) },
+            prev() { return this.previous() },
+            focus(el) {
+                if (! el) return
 
-		if (this._size >= this.maxSize) {
-			this._size = 0;
-			this._emitEvictions(this.oldCache);
-			this.oldCache = this.cache;
-			this.cache = new Map();
-		}
-	}
+                setTimeout(() => {
+                    if (! el.hasAttribute('tabindex')) el.setAttribute('tabindex', '0')
 
-	_moveToRecent(key, item) {
-		this.oldCache.delete(key);
-		this._set(key, item);
-	}
+                    el.focus({ preventScroll: this._noscroll })
+                })
+            }
+        }
+    })
 
-	* _entriesAscending() {
-		for (const item of this.oldCache) {
-			const [key, value] = item;
-			if (!this.cache.has(key)) {
-				const deleted = this._deleteIfExpired(key, value);
-				if (deleted === false) {
-					yield item;
-				}
-			}
-		}
+    Alpine.directive('trap', Alpine.skipDuringClone(
+        (el, { expression, modifiers }, { effect, evaluateLater, cleanup }) => {
+            let evaluator = evaluateLater(expression)
 
-		for (const item of this.cache) {
-			const [key, value] = item;
-			const deleted = this._deleteIfExpired(key, value);
-			if (deleted === false) {
-				yield item;
-			}
-		}
-	}
+            let oldValue = false
 
-	get(key) {
-		if (this.cache.has(key)) {
-			const item = this.cache.get(key);
+            let trap = createFocusTrap(el, {
+                escapeDeactivates: false,
+                allowOutsideClick: true,
+                fallbackFocus: () => el,
+                initialFocus: el.querySelector('[autofocus]')
+            })
 
-			return this._getItemValue(key, item);
-		}
+            let undoInert = () => {}
+            let undoDisableScrolling = () => {}
 
-		if (this.oldCache.has(key)) {
-			const item = this.oldCache.get(key);
-			if (this._deleteIfExpired(key, item) === false) {
-				this._moveToRecent(key, item);
-				return item.value;
-			}
-		}
-	}
+            const releaseFocus = () => {
+                undoInert()
+                undoInert = () => {}
 
-	set(key, value, {maxAge = this.maxAge === Infinity ? undefined : Date.now() + this.maxAge} = {}) {
-		if (this.cache.has(key)) {
-			this.cache.set(key, {
-				value,
-				maxAge
-			});
-		} else {
-			this._set(key, {value, expiry: maxAge});
-		}
-	}
+                undoDisableScrolling()
+                undoDisableScrolling = () => {}
 
-	has(key) {
-		if (this.cache.has(key)) {
-			return !this._deleteIfExpired(key, this.cache.get(key));
-		}
+                trap.deactivate({
+                    returnFocus: !modifiers.includes('noreturn')
+                })
+            }
 
-		if (this.oldCache.has(key)) {
-			return !this._deleteIfExpired(key, this.oldCache.get(key));
-		}
+            effect(() => evaluator(value => {
+                if (oldValue === value) return
 
-		return false;
-	}
+                // Start trapping.
+                if (value && ! oldValue) {
+                    setTimeout(() => {
+                        if (modifiers.includes('inert')) undoInert = setInert(el)
+                        if (modifiers.includes('noscroll')) undoDisableScrolling = disableScrolling()
 
-	peek(key) {
-		if (this.cache.has(key)) {
-			return this._peek(key, this.cache);
-		}
+                        trap.activate()
+                    });
+                }
 
-		if (this.oldCache.has(key)) {
-			return this._peek(key, this.oldCache);
-		}
-	}
+                // Stop trapping.
+                if (! value && oldValue) {
+                    releaseFocus()
+                }
 
-	delete(key) {
-		const deleted = this.cache.delete(key);
-		if (deleted) {
-			this._size--;
-		}
+                oldValue = !! value
+            }))
 
-		return this.oldCache.delete(key) || deleted;
-	}
-
-	clear() {
-		this.cache.clear();
-		this.oldCache.clear();
-		this._size = 0;
-	}
-	
-	resize(newSize) {
-		if (!(newSize && newSize > 0)) {
-			throw new TypeError('`maxSize` must be a number greater than 0');
-		}
-
-		const items = [...this._entriesAscending()];
-		const removeCount = items.length - newSize;
-		if (removeCount < 0) {
-			this.cache = new Map(items);
-			this.oldCache = new Map();
-			this._size = items.length;
-		} else {
-			if (removeCount > 0) {
-				this._emitEvictions(items.slice(0, removeCount));
-			}
-
-			this.oldCache = new Map(items.slice(removeCount));
-			this.cache = new Map();
-			this._size = 0;
-		}
-
-		this.maxSize = newSize;
-	}
-
-	* keys() {
-		for (const [key] of this) {
-			yield key;
-		}
-	}
-
-	* values() {
-		for (const [, value] of this) {
-			yield value;
-		}
-	}
-
-	* [Symbol.iterator]() {
-		for (const item of this.cache) {
-			const [key, value] = item;
-			const deleted = this._deleteIfExpired(key, value);
-			if (deleted === false) {
-				yield [key, value.value];
-			}
-		}
-
-		for (const item of this.oldCache) {
-			const [key, value] = item;
-			if (!this.cache.has(key)) {
-				const deleted = this._deleteIfExpired(key, value);
-				if (deleted === false) {
-					yield [key, value.value];
-				}
-			}
-		}
-	}
-
-	* entriesDescending() {
-		let items = [...this.cache];
-		for (let i = items.length - 1; i >= 0; --i) {
-			const item = items[i];
-			const [key, value] = item;
-			const deleted = this._deleteIfExpired(key, value);
-			if (deleted === false) {
-				yield [key, value.value];
-			}
-		}
-
-		items = [...this.oldCache];
-		for (let i = items.length - 1; i >= 0; --i) {
-			const item = items[i];
-			const [key, value] = item;
-			if (!this.cache.has(key)) {
-				const deleted = this._deleteIfExpired(key, value);
-				if (deleted === false) {
-					yield [key, value.value];
-				}
-			}
-		}
-	}
-
-	* entriesAscending() {
-		for (const [key, value] of this._entriesAscending()) {
-			yield [key, value.value];
-		}
-	}
-
-	get size() {
-		if (!this._size) {
-			return this.oldCache.size;
-		}
-
-		let oldCacheSize = 0;
-		for (const key of this.oldCache.keys()) {
-			if (!this.cache.has(key)) {
-				oldCacheSize++;
-			}
-		}
-
-		return Math.min(this._size + oldCacheSize, this.maxSize);
-	}
+            cleanup(releaseFocus)
+        },
+        // When cloning, we only want to add aria-hidden attributes to the
+        // DOM and not try to actually trap, as trapping can mess with the
+        // live DOM and isn't just isolated to the cloned DOM.
+        (el, { expression, modifiers }, { evaluate }) => {
+            if (modifiers.includes('inert') && evaluate(expression)) setInert(el)
+        },
+    ))
 }
 
-module.exports = QuickLRU;
+function setInert(el) {
+    let undos = []
+
+    crawlSiblingsUp(el, (sibling) => {
+        let cache = sibling.hasAttribute('aria-hidden')
+
+        sibling.setAttribute('aria-hidden', 'true')
+
+        undos.push(() => cache || sibling.removeAttribute('aria-hidden'))
+    })
+
+    return () => {
+        while(undos.length) undos.pop()()
+    }
+}
+
+function crawlSiblingsUp(el, callback) {
+    if (el.isSameNode(document.body) || ! el.parentNode) return
+
+    Array.from(el.parentNode.children).forEach(sibling => {
+        if (sibling.isSameNode(el)) {
+            crawlSiblingsUp(el.parentNode, callback)
+        } else {
+            callback(sibling)
+        }
+    })
+}
+
+function disableScrolling() {
+    let overflow = document.documentElement.style.overflow
+    let paddingRight = document.documentElement.style.paddingRight
+
+    let scrollbarWidth = window.innerWidth - document.documentElement.clientWidth
+
+    document.documentElement.style.overflow = 'hidden'
+    document.documentElement.style.paddingRight = `${scrollbarWidth}px`
+
+    return () => {
+        document.documentElement.style.overflow = overflow
+        document.documentElement.style.paddingRight = paddingRight
+    }
+}
